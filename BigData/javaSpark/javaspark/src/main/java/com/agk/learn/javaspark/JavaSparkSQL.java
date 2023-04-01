@@ -9,10 +9,7 @@ import org.apache.spark.sql.api.java.UDF0;
 import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.sources.In;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StringType;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.*;
 import org.codehaus.janino.Java;
 import scala.Int;
 import scala.None;
@@ -26,6 +23,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.types.DataTypes.IntegerType;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -116,12 +114,144 @@ public class JavaSparkSQL {//implements Serializable{
 //        mostPopularSuperHero(sparkSession);
 //        mostPopularSuperHeroRDD(sparkSession);
 //        leastPopularSuperHeroRDD(sparkSession);
-        findDegreeOfSeparationBetweenSuperheroes(sparkSession);
+//        findDegreeOfSeparationBetweenSuperheroes(sparkSession);
+        findSimilarMovies(sparkSession);
+
 
         sparkSession.stop();
     }
 
+    private static void findSimilarMovies(SparkSession sparkSession){
+        // Create schema when reading u.item
+        StructType moviesNamesSchema = new StructType()
+                .add("movieID", IntegerType, true)
+                .add("movieTitle", DataTypes.StringType, true);
+
+        // Create schema when reading u.data
+        StructType moviesSchema = new StructType()
+                .add("userID", IntegerType, true)
+                .add("movieID", IntegerType, true)
+                .add("rating", IntegerType, true)
+                .add("timestamp", DataTypes.LongType, true);
+    }
+
     private static void findDegreeOfSeparationBetweenSuperheroes(SparkSession sparkSession) {
+        System.out.println("+++++ Java Spark SQL : using RDD : Degree of Separation between Superheroes +++++");
+
+        final Scanner scanner1 = new Scanner(System.in);
+        System.out.print("Enter superhero 1: ");
+        final Integer superhero1 = Integer.parseInt( scanner1.nextLine() );
+
+        final Scanner scanner2 = new Scanner(System.in);
+        System.out.print("Enter superhero 2: ");
+        final Integer superhero2 = Integer.parseInt( scanner2.nextLine() );
+
+        System.out.println("Finding distance between " + superhero1 + " and " + superhero2);
+
+        Integer theDistance = 9999;
+
+        JavaSparkContext sparkContext = new JavaSparkContext(sparkSession.sparkContext());
+
+        JavaRDD<String> superHeroGraph = sparkContext.textFile(".\\src\\main\\resources\\marvelGraph.txt");
+
+        JavaRDD<Tuple5<Integer, List<Integer>, Integer, String, Integer>> superHeroData = superHeroGraph
+                .map(data -> {
+                    String[] splits = data.split("\\s+");
+                    Integer HeroId = Integer.parseInt(splits[0].trim());
+                    List<String> strNeighbours = new ArrayList<>(Arrays.asList(splits).subList(1, splits.length));
+                    List<Integer> Neighbours = new ArrayList<>();
+                    for (String str : strNeighbours) {
+                        Neighbours.add(Integer.parseInt(str));
+                    }
+                    int distance = 9999;
+                    String colour = "white";
+                    if (HeroId.equals(superhero1)) {
+                        distance = 0;
+                        colour = "gray";
+                    }
+                    Integer numberOfConnections = Neighbours.size();
+                    return new Tuple5<>(HeroId, Neighbours, distance, colour, numberOfConnections);
+                });
+
+        JavaPairRDD<Integer, Tuple5<Integer, List<Integer>, Integer, String, Integer>> superheroGraph = superHeroData
+                .mapToPair(tuple -> new Tuple2<>(tuple._1(), tuple))
+                .reduceByKey((x, y) -> {
+                    List<Integer> combinedList = new ArrayList<>(x._2());
+                    combinedList.addAll(y._2());
+                    return new Tuple5<>(x._1(), combinedList, x._3(), x._4(), x._5());
+                })
+                .sortByKey();
+
+        final Integer numberOfIterations = 10;
+
+        for(Integer i = 1; i < numberOfIterations; i++ ){
+            System.out.println("Implementation pending " + i);
+            // use accumulator
+            /*
+            import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.spark.Accumulator;
+import org.apache.spark.AccumulatorParam;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+
+public class CollectionAccumulatorExample {
+
+    public static void main(String[] args) {
+
+        // Create a Spark configuration object
+        SparkConf conf = new SparkConf().setAppName("Collection Accumulator Example").setMaster("local[*]");
+
+        // Create a Spark context
+        JavaSparkContext sc = new JavaSparkContext(conf);
+
+        // Create an accumulator variable
+        Accumulator<List<String>> accumulator = sc.accumulator(new ArrayList<String>(), new ListAccumulatorParam());
+
+        // Create an RDD
+        JavaRDD<String> rdd = sc.parallelize(Arrays.asList("hello", "world", "from", "spark"));
+
+        // Add each element of the RDD to the accumulator
+        rdd.foreach(x -> accumulator.add(Arrays.asList(x)));
+
+        // Print the value of the accumulator
+        System.out.println("Accumulated List: " + accumulator.value());
+
+        // Stop the Spark context
+        sc.stop();
+    }
+}
+
+// AccumulatorParam implementation for List<String>
+class ListAccumulatorParam implements AccumulatorParam<List<String>> {
+
+    @Override
+    public List<String> addInPlace(List<String> r1, List<String> r2) {
+        r1.addAll(r2);
+        return r1;
+    }
+
+    @Override
+    public List<String> zero(List<String> initialValue) {
+        return new ArrayList<String>();
+    }
+
+    @Override
+    public List<String> addAccumulator(List<String> r1, List<String> r2) {
+        r1.addAll(r2);
+        return r1;
+    }
+}
+
+             */
+        }
+
+        System.out.println("====++++****$$$$ The distance between " + superhero1 + " and " + superhero2 + " is " + theDistance);
+    }
+
+    private static void findDegreeOfSeparationBetweenSuperheroesUsingLocalAndRdd(SparkSession sparkSession) {
         System.out.println("+++++ Java Spark SQL : using Local Variables and RDD : Degree of Separation between Superheroes +++++");
 
         final Scanner scanner1 = new Scanner(System.in);
@@ -397,7 +527,7 @@ public class JavaSparkSQL {//implements Serializable{
         System.out.println("+++++ Java Spark SQL : using Dataset : Most Popular Super Hero +++++");
 
         StructType superHeroIdNameSchema = new StructType()
-                .add("id", DataTypes.IntegerType)
+                .add("id", IntegerType)
                 .add("name",DataTypes.StringType);
 
         Dataset<Row> superHeroIdNames = sparkSession
@@ -435,10 +565,10 @@ public class JavaSparkSQL {//implements Serializable{
         System.out.println("+++++ Java Spark SQL : Rating Counter +++++");
 
         StructType movieRawSchema = new StructType()
-                .add("custId", DataTypes.IntegerType)
-                .add("movieId", DataTypes.IntegerType)
-                .add("rating", DataTypes.IntegerType)
-                .add("timestamp", DataTypes.IntegerType);
+                .add("custId", IntegerType)
+                .add("movieId", IntegerType)
+                .add("rating", IntegerType)
+                .add("timestamp", IntegerType);
 
         Dataset<Row> inputFile = sparkSession
                 .read()
@@ -453,30 +583,30 @@ public class JavaSparkSQL {//implements Serializable{
                 .sort(desc("avg_rating"));
 
         StructType movieSchema = new StructType()
-                .add("movieId", DataTypes.IntegerType)
+                .add("movieId", IntegerType)
                 .add("movieName", DataTypes.StringType)
                 .add("releaseDate", DataTypes.StringType)
                 .add("emptyString1", DataTypes.StringType)
                 .add("movieURL", DataTypes.StringType)
-                .add("genre01", DataTypes.IntegerType)
-                .add("genre02", DataTypes.IntegerType)
-                .add("genre03", DataTypes.IntegerType)
-                .add("genre04", DataTypes.IntegerType)
-                .add("genre05", DataTypes.IntegerType)
-                .add("genre06", DataTypes.IntegerType)
-                .add("genre07", DataTypes.IntegerType)
-                .add("genre08", DataTypes.IntegerType)
-                .add("genre09", DataTypes.IntegerType)
-                .add("genre10", DataTypes.IntegerType)
-                .add("genre11", DataTypes.IntegerType)
-                .add("genre12", DataTypes.IntegerType)
-                .add("genre13", DataTypes.IntegerType)
-                .add("genre14", DataTypes.IntegerType)
-                .add("genre15", DataTypes.IntegerType)
-                .add("genre16", DataTypes.IntegerType)
-                .add("genre17", DataTypes.IntegerType)
-                .add("genre18", DataTypes.IntegerType)
-                .add("genre19", DataTypes.IntegerType);
+                .add("genre01", IntegerType)
+                .add("genre02", IntegerType)
+                .add("genre03", IntegerType)
+                .add("genre04", IntegerType)
+                .add("genre05", IntegerType)
+                .add("genre06", IntegerType)
+                .add("genre07", IntegerType)
+                .add("genre08", IntegerType)
+                .add("genre09", IntegerType)
+                .add("genre10", IntegerType)
+                .add("genre11", IntegerType)
+                .add("genre12", IntegerType)
+                .add("genre13", IntegerType)
+                .add("genre14", IntegerType)
+                .add("genre15", IntegerType)
+                .add("genre16", IntegerType)
+                .add("genre17", IntegerType)
+                .add("genre18", IntegerType)
+                .add("genre19", IntegerType);
 
         Dataset<Row> movieData = sparkSession
                 .read()
@@ -524,8 +654,8 @@ public class JavaSparkSQL {//implements Serializable{
     private static void customerOrder(SparkSession sparkSession){
 
         StructType customerSchema = new StructType()
-                .add("customerId", DataTypes.IntegerType)
-                .add("itemId", DataTypes.IntegerType)
+                .add("customerId", IntegerType)
+                .add("itemId", IntegerType)
                 .add("amountSpent", DataTypes.DoubleType);
 
         Dataset<Row> customerData = sparkSession
@@ -551,14 +681,14 @@ public class JavaSparkSQL {//implements Serializable{
         // Define the schema using StructType and StructField
         StructType schema1 = new StructType(new StructField[] {
                 new StructField("stationID", DataTypes.StringType, true, null),
-                new StructField("date", DataTypes.IntegerType, true, null),
+                new StructField("date", IntegerType, true, null),
                 new StructField("measure_type", DataTypes.StringType, true, null),
                 new StructField("temperature", DataTypes.DoubleType, true, null),
         });
 
         StructType schema2 = new StructType()
                 .add("id", DataTypes.StringType)
-                .add("date", DataTypes.IntegerType)
+                .add("date", IntegerType)
                 .add("measure_type", DataTypes.StringType)
                 .add("temperature", DataTypes.DoubleType);
 
